@@ -1,0 +1,38 @@
+version: '2'
+
+services:
+
+    backend:
+        volumes:
+            - ./project:/project
+        build:
+            context: .
+            dockerfile: docker/Dockerfile
+        environment:
+            LOG_LEVEL: DEBUG
+
+    celery:
+        volumes:
+            - ./project:/project
+        build:
+            context: .
+            dockerfile: docker/Dockerfile
+        environment:
+            LOG_LEVEL: DEBUG
+
+    frontend:
+        build:
+            context: docker
+            dockerfile: Dockerfile.nginx
+        volumes:
+            - ./project/static:/static/static
+            - ./etc/nginx/sites-enabled:/etc/nginx/conf.d
+
+    db:
+        volumes:
+            - ./initdb:/docker-entrypoint-initdb.d
+            - /var/lib/postgresql/data
+
+        build:
+            context: .
+            dockerfile: docker/Dockerfile.db

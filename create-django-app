@@ -1,0 +1,72 @@
+#!/bin/sh
+
+#Django API (postgres + DRF + swagger + celery + gunicorn + dockerized)
+
+set -x
+set -e
+PROJECT=${1:-osservice}
+VENV=/mnt/venv/${PROJECT}
+SCRIPT=`readlink -e $0`
+SCRIPT_DIR=`dirname ${SCRIPT}`
+
+if [ ! -d "${VENV}" ]; then
+mkdir -p ${VENV}
+cd ${VENV}
+python3 -m venv --clear .
+cd -
+fi
+[ ! -f pip_requirements.txt ] && cat > pip_requirements.txt <<EOF
+Django
+django-filter
+djangorestframework
+celery
+drf-yasg
+psycopg2-binary
+swagger_spec_validator
+
+# run under paste.deploy
+gunicorn
+keystonemiddleware
+paste
+PasteDeploy
+eventlet
+EOF
+
+${VENV}/bin/python3 ${VENV}/bin/pip3 install -r pip_requirements.txt
+
+if [ ! -d "${PROJECT}" ]; then
+  mkdir -p ${PROJECT}
+  mv pip_requirements.txt ${PROJECT}
+  cd ${PROJECT}
+  mkdir -p project &&  ${VENV}/bin/django-admin startproject app project
+  cd -
+fi
+
+cd ${PROJECT}/project
+[ ! -d api ] && ${VENV}/bin/python3 ./manage.py startapp api
+
+
+cat >> app/settings.py <<'EOF'
+import logging
+#import sys
+_LOG = logging.getLogger(__name__)
+ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
+#if ROOT_PATH not in sys.path:
+#    sys.path.append(ROOT_PATH)
+
+LOCAL_SETTINGS_DIR_PATH = os.path.join(ROOT_PATH, "local_settings.d")
+if os.path.exists(LOCAL_SETTINGS_DIR_PATH):
+    for (dirpath, dirnames, filenames) in os.walk(LOCAL_SETTINGS_DIR_PATH):
+        for filename in sorted(filenames):
+            if filename.endswith(".py"):
+                try:
+                    with open(os.path.join(dirpath, filename)) as f:
+                        exec(f.read())
+                except Exception as e:
+                    _LOG.exception(
+                        "Can not exec settings snippet %s", filename)
+EOF
+
+(cd  ${SCRIPT_DIR}/stub && tar --dereference -cf - . )|(cd .. && tar -xf -)
+#${VENV}/bin/python3 ./manage.py migrate
+#(cd project && ${VENV}/bin/python3 ./manage.py runserver 0.0.0.0:8080)

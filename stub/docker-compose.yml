@@ -1,0 +1,76 @@
+version: '2'
+
+networks:
+  project-network:
+    driver: bridge
+
+services:
+
+    db:
+        image: project/db
+        restart: unless-stopped
+        networks:
+          - project-network
+        ports:
+            - 5432:5432
+        volumes:
+            - /var/lib/postgresql/data
+
+    frontend:
+        image: project/frontend
+        restart: unless-stopped
+        networks:
+          - project-network
+        ports:
+            - 443:443
+            - 80:80
+        depends_on:
+          - backend
+
+    backend:
+        image: project/backend
+        restart: unless-stopped
+        networks:
+          - project-network
+        depends_on:
+            - db
+            - rabbitmq
+        ports:
+            - 8090:8090
+        environment:
+            DJANGO_SETTINGS_MODULE: app.settings
+            LOG_FILE: ./project-backend.log
+        command:
+          - 'sh'
+          - '-c'
+          - ./manage.py migrate --traceback &&
+            ./manage.py migrate &&
+            ./manage.py collectstatic --noinput &&
+            gunicorn -k eventlet --paste pasteini/api.ini
+#           ./manage.py runserver 0.0.0.0:8090
+
+    celery:
+        image: project/celery
+        restart: unless-stopped
+        networks:
+          - project-network
+        depends_on:
+            - db
+            - rabbitmq
+        environment:
+            DJANGO_SETTINGS_MODULE: app.settings
+            LOG_FILE: ./project-celery.log
+        command: celery -A app worker -l info
+
+    rabbitmq:
+        image: rabbitmq:3.7-alpine
+        restart: unless-stopped
+        networks:
+          - project-network
+        ports:
+            - 5672:5672
+        volumes:
+            - /var/lib/rabbitmq
+        environment:
+            RABBITMQ_DEFAULT_USER: mq_user
+            RABBITMQ_DEFAULT_PASS: mq_password

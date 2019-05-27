@@ -1,0 +1,8 @@
+FROM nginx:alpine
+
+RUN set -ex \
+	&& apk add --no-cache --virtual .build-deps \
+	openssl \
+	&& mkdir -p /etc/openssl/certs/ \
+	&& mkdir -p /etc/nginx/snippets/ \
+	&& apk del .build-deps
